@@ -29,14 +29,20 @@ Run with the in-memory H2 fallback — zero setup, data resets on restart:
 ## Standard start (PostgreSQL)
 
 ```bash
-# 1. Start Postgres (Docker option)
+# 1. Copy env template and start Postgres (Docker option)
+cp .env.example .env   # then set DB_PASSWORD inside .env
 docker compose up -d
 
 # ...or create the DB manually:
-# createdb campuscourier
+# createdb campus_courier
 
-# 2. Run the app (reads DB_URL / DB_USERNAME / DB_PASSWORD, defaults to localhost)
+# 2. Run the app. Flyway migrates the schema automatically on startup
+#    (Hibernate only VALIDATES — it never creates tables).
+#    Defaults read DB_URL / DB_USERNAME / DB_PASSWORD, else localhost.
 ./mvnw spring-boot:run
+
+# 3. Same, but with SQL logging to learn what Hibernate is doing:
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 App: http://localhost:8080 · Swagger UI: http://localhost:8080/swagger-ui.html
@@ -101,11 +107,16 @@ separate means you can change the DB without breaking the React app.
 ## Tests
 
 ```bash
-./mvnw test   # H2 in-memory, never touches Postgres
+./mvnw test   # H2 in PostgreSQL mode: runs the REAL Flyway migration,
+              # then Hibernate validates entities against it.
+              # Still not a live-Postgres proof — run one before production:
+              #   docker compose up -d && ./mvnw spring-boot:run
 ```
 
-Covers: fee polymorphism (`ParcelFeeTest`), service logic with Mockito
-(`ParcelServiceTest`), Spring context (`CampusCourierApplicationTests`).
+Covers: fee polymorphism (`ParcelTest`), constructor validation, rider
+defaults, repository persistence + discriminators + rider link + tracking
+uniqueness (`ParcelRepositoryTest`, `DispatchRiderRepositoryTest`),
+Spring context (`CampusCourierApplicationTests`).
 
 ## React integration
 

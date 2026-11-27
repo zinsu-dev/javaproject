@@ -112,16 +112,18 @@ class ParcelTest {
     }
 
     @Test
-    void newParcelsGetUniqueIdsAndTrackingIds() {
+    void newParcelsGetUniqueTrackingIdsImmediately() {
+        // NOTE: getId() is null until the parcel is SAVED — the database
+        // assigns ids on persist (GenerationType.UUID). The human-facing
+        // trackingId, however, is generated in the constructor so it can
+        // be given to the sender straight away.
         Parcel first = new DocumentParcel("A", "B", "X", "Y", WEIGHT);
         Parcel second = new DocumentParcel("A", "B", "X", "Y", WEIGHT);
 
-        assertNotNull(first.getId());
         assertNotNull(first.getTrackingId());
         assertTrue(first.getTrackingId().startsWith("CC-"),
                 "tracking ids look like CC-XXXXXXXX");
-        // Random generation must not hand out the same identity twice.
-        assertTrue(!first.getId().equals(second.getId()));
+        // Random generation must not hand out the same code twice.
         assertTrue(!first.getTrackingId().equals(second.getTrackingId()));
     }
 }

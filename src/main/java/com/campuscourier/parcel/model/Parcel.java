@@ -1,51 +1,96 @@
 package com.campuscourier.parcel.model;
 
+import com.campuscourier.rider.model.DispatchRider;
+import jakarta.persistence.Column;
+import jakarta.persistence.DiscriminatorColumn;
+import jakarta.persistence.DiscriminatorType;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Inheritance;
+import jakarta.persistence.InheritanceType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Base class for every parcel in the Campus Courier system.
+ * Base parcel entity.
  *
- * DESIGN NOTES (for beginners):
- * - This class is ABSTRACT: you can never do "new Parcel(...)". It only
- *   exists to hold behaviour shared by all parcel types. Concrete types
- *   (DocumentParcel, FragileParcel, BulkFreight) extend it.
- * - It is a plain Java class on purpose: no database annotations yet.
- *   Persistence (JPA) arrives in Phase 2, so this model can be tested
- *   as pure Java with zero infrastructure.
- * - Money uses BigDecimal, never double (see calculateHandlingFee docs).
+ * PERSISTENCE NOTES (for beginners):
+ * - SINGLE_TABLE inheritance = ONE "parcels" table for all three parcel
+ *   types. The "parcel_type" column tells Hibernate which subclass to
+ *   build when reading a row back ("DOCUMENT", "FRAGILE" or "BULK").
+ * - All business logic from Phase 1 is untouched: the abstract
+ *   calculateHandlingFee(), calculateTotalFee(), validation, PENDING
+ *   default. JPA annotations only describe the database mapping.
+ * - The protected no-arg constructor exists ONLY for Hibernate (it
+ *   creates empty objects via reflection, then fills fields). Always
+ *   use the full constructor in application code.
  */
+@Entity
+@Table(name = "parcels")
+@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
+@DiscriminatorColumn(name = "parcel_type", discriminatorType = DiscriminatorType.STRING)
 public abstract class Parcel {
 
-    /** Unique identity, generated once and never changed. */
-    private final UUID id;
+    /**
+     * Database-generated identity. NULL until the parcel is saved for the
+     * first time — GenerationType.UUID asks Hibernate to fill it in on
+     * persist. (The human-facing code is trackingId, generated below.)
+     */
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
-    /** Human-friendly code given to the sender, e.g. "CC-3F9A2C1D". */
+    @Column(name = "tracking_id", nullable = false, unique = true, updatable = false)
     private String trackingId;
 
+    @Column(name = "sender_name", nullable = false)
     private String senderName;
+
+    @Column(name = "recipient_name", nullable = false)
     private String recipientName;
+
+    @Column(name = "pickup_location", nullable = false)
     private String pickupLocation;
+
+    @Column(name = "destination", nullable = false)
     private String destination;
 
-    /** Weight in kilograms. Must always be greater than zero. */
+    @Column(name = "weight", nullable = false, precision = 10, scale = 3)
     private BigDecimal weight;
 
-    /** Every new parcel starts life as PENDING. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
     private DeliveryStatus status;
 
     /**
-     * @param senderName    who sends the parcel (must not be null/blank)
-     * @param recipientName who receives it (must not be null/blank)
-     * @param pickupLocation where the rider collects it
-     * @param destination    where it must be delivered
-     * @param weight         weight in kg, must be greater than zero
+     * The rider carrying this parcel. Optional: a parcel exists first
+     * (PENDING) and is assigned a rider later. Many parcels can point
+     * to the same rider over time. LAZY = the rider row is only loaded
+     * when getRider() is actually called, not with every parcel query.
+     * Unidirectional on purpose: the rider does not hold a parcel list,
+     * which avoids circular references and huge accidental data loads.
      */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "rider_id")
+    private DispatchRider rider;
+
+    /** For Hibernate only. Do not use in application code. */
+    protected Parcel() {
+        this.status = DeliveryStatus.PENDING;
+    }
+
     protected Parcel(String senderName, String recipientName,
                      String pickupLocation, String destination,
                      BigDecimal weight) {
-        this.id = UUID.randomUUID();
         this.trackingId = generateTrackingId();
         this.senderName = requireText(senderName, "senderName");
         this.recipientName = requireText(recipientName, "recipientName");
@@ -151,7 +196,7 @@ public abstract class Parcel {
         return weight;
     }
 
-    public final void setWeight(BigDecimal weight) {
+    public void setWeight(BigDecimal weight) {
         requirePositiveWeight(weight);
         this.weight = weight;
     }
@@ -162,6 +207,14 @@ public abstract class Parcel {
 
     public void setStatus(DeliveryStatus status) {
         this.status = Objects.requireNonNull(status, "status must not be null");
+    }
+
+    public DispatchRider getRider() {
+        return rider;
+    }
+
+    public void setRider(DispatchRider rider) {
+        this.rider = rider;
     }
 
     @Override

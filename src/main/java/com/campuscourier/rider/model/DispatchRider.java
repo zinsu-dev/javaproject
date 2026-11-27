@@ -1,5 +1,11 @@
 package com.campuscourier.rider.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -7,31 +13,52 @@ import java.util.UUID;
  * A dispatch rider who picks up and delivers parcels.
  *
  * Encapsulation: all fields are private. State can only change through
- * the constructor and the setters below, and a new rider is ALWAYS
- * created available — callers cannot forget to set it.
+ * the constructors and setters below, and a new rider is ALWAYS created
+ * available — callers cannot forget to set it.
  */
+@Entity
+@Table(name = "dispatch_riders")
 public class DispatchRider {
 
-    private final UUID id;
+    /**
+     * Database-generated identity. NULL until the rider is saved for the
+     * first time — GenerationType.UUID asks Hibernate to fill it in on
+     * persist.
+     */
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(name = "full_name", nullable = false)
     private String fullName;
+
+    @Column(name = "phone_number", nullable = false)
     private String phoneNumber;
+
+    @Column(name = "available", nullable = false)
     private Boolean available;
 
-    /**
-     * New rider: identity generated, marked available immediately.
-     */
-    public DispatchRider(String fullName, String phoneNumber) {
-        this(UUID.randomUUID(), fullName, phoneNumber, Boolean.TRUE);
+    /** For Hibernate only. Do not use in application code. */
+    protected DispatchRider() {
     }
 
     /**
-     * Full constructor (used when rebuilding a rider loaded from storage
-     * in a later phase, where id and availability are already known).
+     * New rider: marked available immediately. The id stays null until
+     * the rider is saved — the database (via Hibernate) assigns it.
      */
-    public DispatchRider(UUID id, String fullName, String phoneNumber, Boolean available) {
-        this.id = Objects.requireNonNull(id, "id must not be null");
+    public DispatchRider(String fullName, String phoneNumber) {
         this.fullName = requireText(fullName, "fullName");
         this.phoneNumber = requireText(phoneNumber, "phoneNumber");
+        this.available = Boolean.TRUE;
+    }
+
+    /**
+     * Full constructor (used when rebuilding a rider whose id and
+     * availability are already known, e.g. in tests).
+     */
+    public DispatchRider(UUID id, String fullName, String phoneNumber, Boolean available) {
+        this(fullName, phoneNumber);
+        this.id = id;
         this.available = Objects.requireNonNull(available, "available must not be null");
     }
 
