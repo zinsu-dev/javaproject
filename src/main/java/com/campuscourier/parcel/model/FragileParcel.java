@@ -1,37 +1,23 @@
 package com.campuscourier.parcel.model;
 
-import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.Entity;
+import java.math.BigDecimal;
 
 /**
- * Breakable items (glass, electronics...). Costs more because of
- * special packaging + careful handling surcharge.
+ * Breakable items (glass, electronics...). Special packaging and careful
+ * handling cost extra: flat ₦1,500.
  */
-@Entity
-@DiscriminatorValue("FRAGILE")
 public class FragileParcel extends Parcel {
 
-    private static final double BASE_FEE = 1500.0;
-    private static final double PER_KG = 300.0;
-    private static final double PER_KM = 50.0;
-
-    protected FragileParcel() {
-        super();
-    }
+    private static final BigDecimal HANDLING_FEE = new BigDecimal("1500");
 
     public FragileParcel(String senderName, String recipientName,
-                         String pickupLocation, String dropoffLocation,
-                         Double weightKg, Double distanceKm) {
-        super(senderName, recipientName, pickupLocation, dropoffLocation, weightKg, distanceKm);
+                         String pickupLocation, String destination,
+                         BigDecimal weight) {
+        super(senderName, recipientName, pickupLocation, destination, weight);
     }
 
     @Override
-    public double calculateFee() {
-        return BASE_FEE + (getWeightKg() * PER_KG) + (getDistanceKm() * PER_KM);
-    }
-
-    @Override
-    public ParcelType getParcelType() {
-        return ParcelType.FRAGILE;
+    public BigDecimal calculateHandlingFee() {
+        return HANDLING_FEE;
     }
 }

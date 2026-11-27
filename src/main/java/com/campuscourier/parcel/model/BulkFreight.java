@@ -1,37 +1,23 @@
 package com.campuscourier.parcel.model;
 
-import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.Entity;
+import java.math.BigDecimal;
 
 /**
  * Heavy / large freight (hostel move-out boxes, department equipment...).
- * Highest rates: needs a vehicle and possibly extra hands.
+ * Needs a vehicle and possibly extra hands: flat ₦3,000.
  */
-@Entity
-@DiscriminatorValue("BULK")
 public class BulkFreight extends Parcel {
 
-    private static final double BASE_FEE = 3000.0;
-    private static final double PER_KG = 500.0;
-    private static final double PER_KM = 100.0;
-
-    protected BulkFreight() {
-        super();
-    }
+    private static final BigDecimal HANDLING_FEE = new BigDecimal("3000");
 
     public BulkFreight(String senderName, String recipientName,
-                       String pickupLocation, String dropoffLocation,
-                       Double weightKg, Double distanceKm) {
-        super(senderName, recipientName, pickupLocation, dropoffLocation, weightKg, distanceKm);
+                       String pickupLocation, String destination,
+                       BigDecimal weight) {
+        super(senderName, recipientName, pickupLocation, destination, weight);
     }
 
     @Override
-    public double calculateFee() {
-        return BASE_FEE + (getWeightKg() * PER_KG) + (getDistanceKm() * PER_KM);
-    }
-
-    @Override
-    public ParcelType getParcelType() {
-        return ParcelType.BULK;
+    public BigDecimal calculateHandlingFee() {
+        return HANDLING_FEE;
     }
 }

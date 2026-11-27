@@ -1,37 +1,25 @@
 package com.campuscourier.parcel.model;
 
-import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.Entity;
+import java.math.BigDecimal;
 
 /**
- * Light envelopes / documents. Cheapest handling:
- * flat base fee + small per-kg and per-km charges.
+ * Light envelopes / documents. Cheapest handling: flat ₦500.
+ *
+ * Note the String constructor argument: new BigDecimal("500") is exact,
+ * while new BigDecimal(500.0) would inherit binary floating-point error.
  */
-@Entity
-@DiscriminatorValue("DOCUMENT")
 public class DocumentParcel extends Parcel {
 
-    private static final double BASE_FEE = 500.0;
-    private static final double PER_KG = 100.0;
-    private static final double PER_KM = 20.0;
-
-    protected DocumentParcel() {
-        super();
-    }
+    private static final BigDecimal HANDLING_FEE = new BigDecimal("500");
 
     public DocumentParcel(String senderName, String recipientName,
-                          String pickupLocation, String dropoffLocation,
-                          Double weightKg, Double distanceKm) {
-        super(senderName, recipientName, pickupLocation, dropoffLocation, weightKg, distanceKm);
+                          String pickupLocation, String destination,
+                          BigDecimal weight) {
+        super(senderName, recipientName, pickupLocation, destination, weight);
     }
 
     @Override
-    public double calculateFee() {
-        return BASE_FEE + (getWeightKg() * PER_KG) + (getDistanceKm() * PER_KM);
-    }
-
-    @Override
-    public ParcelType getParcelType() {
-        return ParcelType.DOCUMENT;
+    public BigDecimal calculateHandlingFee() {
+        return HANDLING_FEE;
     }
 }

@@ -1,127 +1,118 @@
 package com.campuscourier.parcel.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.DiscriminatorColumn;
-import jakarta.persistence.DiscriminatorType;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Inheritance;
-import jakarta.persistence.InheritanceType;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Base parcel entity.
+ * Base class for every parcel in the Campus Courier system.
  *
- * ARCHITECTURE DECISION (why this looks this way):
- * - One table for all parcel types (SINGLE_TABLE inheritance).
- *   Simple for an MVP: one repository, one query, no joins.
- *   The "parcel_type" column tells Hibernate which subclass to build.
- * - The fee method is ABSTRACT: every subclass MUST provide its own
- *   formula. Calling parcel.calculateFee() runs the subclass version
- *   at runtime — that is runtime polymorphism.
- * - Entities are never returned directly from the API. The service
- *   converts them to DTOs (see dto package) so database details
- *   don't leak into JSON.
+ * DESIGN NOTES (for beginners):
+ * - This class is ABSTRACT: you can never do "new Parcel(...)". It only
+ *   exists to hold behaviour shared by all parcel types. Concrete types
+ *   (DocumentParcel, FragileParcel, BulkFreight) extend it.
+ * - It is a plain Java class on purpose: no database annotations yet.
+ *   Persistence (JPA) arrives in Phase 2, so this model can be tested
+ *   as pure Java with zero infrastructure.
+ * - Money uses BigDecimal, never double (see calculateHandlingFee docs).
  */
-@Entity
-@Table(name = "parcels")
-@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name = "parcel_type", discriminatorType = DiscriminatorType.STRING)
 public abstract class Parcel {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    /** Unique identity, generated once and never changed. */
+    private final UUID id;
 
-    @Column(name = "tracking_number", unique = true, nullable = false, updatable = false)
-    private String trackingNumber;
+    /** Human-friendly code given to the sender, e.g. "CC-3F9A2C1D". */
+    private String trackingId;
 
-    @Column(nullable = false)
     private String senderName;
-
-    @Column(nullable = false)
     private String recipientName;
-
-    @Column(nullable = false)
     private String pickupLocation;
+    private String destination;
 
-    @Column(nullable = false)
-    private String dropoffLocation;
+    /** Weight in kilograms. Must always be greater than zero. */
+    private BigDecimal weight;
 
-    @Column(nullable = false)
-    private Double weightKg;
+    /** Every new parcel starts life as PENDING. */
+    private DeliveryStatus status;
 
-    @Column(nullable = false)
-    private Double distanceKm;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ParcelStatus status = ParcelStatus.REGISTERED;
-
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
-
-    protected Parcel() {
-        // Required by JPA. Never call directly — use subclass constructors.
-    }
-
+    /**
+     * @param senderName    who sends the parcel (must not be null/blank)
+     * @param recipientName who receives it (must not be null/blank)
+     * @param pickupLocation where the rider collects it
+     * @param destination    where it must be delivered
+     * @param weight         weight in kg, must be greater than zero
+     */
     protected Parcel(String senderName, String recipientName,
-                     String pickupLocation, String dropoffLocation,
-                     Double weightKg, Double distanceKm) {
-        this.senderName = senderName;
-        this.recipientName = recipientName;
-        this.pickupLocation = pickupLocation;
-        this.dropoffLocation = dropoffLocation;
-        this.weightKg = weightKg;
-        this.distanceKm = distanceKm;
-        this.status = ParcelStatus.REGISTERED;
+                     String pickupLocation, String destination,
+                     BigDecimal weight) {
+        this.id = UUID.randomUUID();
+        this.trackingId = generateTrackingId();
+        this.senderName = requireText(senderName, "senderName");
+        this.recipientName = requireText(recipientName, "recipientName");
+        this.pickupLocation = requireText(pickupLocation, "pickupLocation");
+        this.destination = requireText(destination, "destination");
+        setWeight(weight); // reuses the validation in one place
+        this.status = DeliveryStatus.PENDING;
     }
 
     /**
-     * Each parcel type implements its own handling-fee formula.
-     * The service/controller just call this method — they don't need
-     * if/else chains checking the parcel type.
+     * Each parcel type defines its OWN handling fee.
+     * Abstract = the parent declares WHAT is needed, each subclass
+     * decides HOW. Calling this on a Parcel reference runs the
+     * subclass version at runtime (runtime polymorphism).
+     *
+     * @return handling fee in Naira, never null
      */
-    public abstract double calculateFee();
+    public abstract BigDecimal calculateHandlingFee();
 
-    /** Each subclass reports its type so DTOs stay simple. */
-    public abstract ParcelType getParcelType();
-
-    @PrePersist
-    void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
-        this.createdAt = now;
-        this.updatedAt = now;
+    /**
+     * Total amount the customer pays. Right now that is just the
+     * handling fee; later phases (distance surcharge, insurance) will
+     * extend THIS method, so subclasses never need to change.
+     *
+     * @return total fee in Naira, never null
+     */
+    public BigDecimal calculateTotalFee() {
+        return calculateHandlingFee();
     }
 
-    @PreUpdate
-    void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+    private static String generateTrackingId() {
+        return "CC-" + UUID.randomUUID().toString()
+                .replace("-", "")
+                .substring(0, 8)
+                .toUpperCase();
     }
 
-    // --- Getters and setters (explicit on purpose: easier for beginners
-    //     to see what is happening than Lombok magic) ---
+    private static String requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return value;
+    }
 
-    public Long getId() {
+    private static void requirePositiveWeight(BigDecimal weight) {
+        // BigDecimal has no < operator, so we use compareTo:
+        // compareTo returns -1, 0, 1 for less/equal/greater.
+        if (weight == null || weight.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Parcel weight must be greater than zero");
+        }
+    }
+
+    // ---- Accessors. Fields stay private (encapsulation): the only way
+    // ---- to read/change state is through these methods, so validation
+    // ---- in setWeight() can never be bypassed. id has no setter because
+    // ---- identity must never change after creation.
+
+    public UUID getId() {
         return id;
     }
 
-    public String getTrackingNumber() {
-        return trackingNumber;
+    public String getTrackingId() {
+        return trackingId;
     }
 
-    public void setTrackingNumber(String trackingNumber) {
-        this.trackingNumber = trackingNumber;
+    public void setTrackingId(String trackingId) {
+        this.trackingId = requireText(trackingId, "trackingId");
     }
 
     public String getSenderName() {
@@ -129,7 +120,7 @@ public abstract class Parcel {
     }
 
     public void setSenderName(String senderName) {
-        this.senderName = senderName;
+        this.senderName = requireText(senderName, "senderName");
     }
 
     public String getRecipientName() {
@@ -137,7 +128,7 @@ public abstract class Parcel {
     }
 
     public void setRecipientName(String recipientName) {
-        this.recipientName = recipientName;
+        this.recipientName = requireText(recipientName, "recipientName");
     }
 
     public String getPickupLocation() {
@@ -145,46 +136,38 @@ public abstract class Parcel {
     }
 
     public void setPickupLocation(String pickupLocation) {
-        this.pickupLocation = pickupLocation;
+        this.pickupLocation = requireText(pickupLocation, "pickupLocation");
     }
 
-    public String getDropoffLocation() {
-        return dropoffLocation;
+    public String getDestination() {
+        return destination;
     }
 
-    public void setDropoffLocation(String dropoffLocation) {
-        this.dropoffLocation = dropoffLocation;
+    public void setDestination(String destination) {
+        this.destination = requireText(destination, "destination");
     }
 
-    public Double getWeightKg() {
-        return weightKg;
+    public BigDecimal getWeight() {
+        return weight;
     }
 
-    public void setWeightKg(Double weightKg) {
-        this.weightKg = weightKg;
+    public final void setWeight(BigDecimal weight) {
+        requirePositiveWeight(weight);
+        this.weight = weight;
     }
 
-    public Double getDistanceKm() {
-        return distanceKm;
-    }
-
-    public void setDistanceKm(Double distanceKm) {
-        this.distanceKm = distanceKm;
-    }
-
-    public ParcelStatus getStatus() {
+    public DeliveryStatus getStatus() {
         return status;
     }
 
-    public void setStatus(ParcelStatus status) {
-        this.status = status;
+    public void setStatus(DeliveryStatus status) {
+        this.status = Objects.requireNonNull(status, "status must not be null");
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+    @Override
+    public String toString() {
+        return getClass().getSimpleName()
+                + "{trackingId='" + trackingId
+                + "', status=" + status + "}";
     }
 }
