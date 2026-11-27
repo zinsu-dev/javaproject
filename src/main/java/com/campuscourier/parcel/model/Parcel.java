@@ -111,6 +111,13 @@ public abstract class Parcel {
     public abstract BigDecimal calculateHandlingFee();
 
     /**
+     * Reports which parcel type this is (DOCUMENT, FRAGILE or BULK).
+     * Like calculateHandlingFee(), each subclass answers for itself —
+     * callers never need instanceof checks.
+     */
+    public abstract ParcelType getParcelType();
+
+    /**
      * Total amount the customer pays. Right now that is just the
      * handling fee; later phases (distance surcharge, insurance) will
      * extend THIS method, so subclasses never need to change.

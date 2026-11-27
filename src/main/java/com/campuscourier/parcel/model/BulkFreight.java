@@ -30,4 +30,9 @@ public class BulkFreight extends Parcel {
     public BigDecimal calculateHandlingFee() {
         return HANDLING_FEE;
     }
+
+    @Override
+    public ParcelType getParcelType() {
+        return ParcelType.BULK;
+    }
 }

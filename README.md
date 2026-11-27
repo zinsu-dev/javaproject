@@ -47,33 +47,41 @@ docker compose up -d
 
 App: http://localhost:8080 · Swagger UI: http://localhost:8080/swagger-ui.html
 
-## API cheat sheet
+## API cheat sheet (Phase 3: parcel management)
 
 ```bash
-# Register a parcel
-curl -X POST http://localhost:8080/api/v1/parcels \
+# Register a parcel → 201 Created + Location header
+curl -X POST http://localhost:8081/api/parcels \
   -H 'Content-Type: application/json' \
   -d '{"parcelType":"DOCUMENT","senderName":"Ama","recipientName":"Kofi",
-       "pickupLocation":"Hall A","dropoffLocation":"Library",
-       "weightKg":1.0,"distanceKm":2.0}'
+       "pickupLocation":"Hall A","destination":"Library","weight":2.0}'
 
-# List all
-curl http://localhost:8080/api/v1/parcels
+# List all parcels
+curl http://localhost:8081/api/parcels
+
+# Get one by UUID
+curl http://localhost:8081/api/parcels/<uuid>
 
 # Track by code
-curl http://localhost:8080/api/v1/parcels/track/CC-XXXXXXXX
+curl http://localhost:8081/api/parcels/track/CC-XXXXXXXX
 
-# Update status
-curl -X PATCH http://localhost:8080/api/v1/parcels/1/status \
+# Update editable delivery details
+curl -X PUT http://localhost:8081/api/parcels/<uuid> \
   -H 'Content-Type: application/json' \
-  -d '{"status":"IN_TRANSIT"}'
+  -d '{"senderName":"Yaw","recipientName":"Esi","pickupLocation":"Gate",
+       "destination":"Faculty","weight":3.0}'
 
-# Fee
-curl http://localhost:8080/api/v1/parcels/1/fee
+# Delete → 204 No Content
+curl -X DELETE http://localhost:8081/api/parcels/<uuid>
 ```
 
-`parcelType` is `DOCUMENT`, `FRAGILE` or `BULK`. Status flows
-`REGISTERED → ASSIGNED → IN_TRANSIT → DELIVERED` (or `CANCELLED`).
+`parcelType` is `DOCUMENT`, `FRAGILE` or `BULK` (anything else → 400).
+New parcels start `PENDING`; `trackingId`, `status` and fees are set by
+the backend. Every response carries `handlingFee` + `totalFee` (flat
+₦500 / ₦1500 / ₦3000 per type — runtime polymorphism, no if/else).
+Status transitions and rider assignment arrive in later phases.
+Errors always look like
+`{"timestamp":"...","status":404,"error":"Not Found","message":"...","path":"..."}`.
 
 ## Fee formulas (runtime polymorphism)
 
@@ -81,11 +89,13 @@ curl http://localhost:8080/api/v1/parcels/1/fee
 
 | Type | Formula |
 |------|---------|
-| DocumentParcel | 500 + 100·kg + 20·km |
-| FragileParcel | 1500 + 300·kg + 50·km |
-| BulkFreight | 3000 + 500·kg + 100·km |
+| DocumentParcel | 500 flat |
+| FragileParcel | 1500 flat |
+| BulkFreight | 3000 flat |
 
-Calling `parcel.calculateFee()` executes the subclass version — no `if/else` in the service.
+Calling `parcel.calculateFee()` / `calculateHandlingFee()` executes the
+subclass version — no `if/else` in the service (type selection for
+*construction* lives in the dedicated `ParcelFactory`).
 
 ## Project layout
 
@@ -116,10 +126,13 @@ separate means you can change the DB without breaking the React app.
 Covers: fee polymorphism (`ParcelTest`), constructor validation, rider
 defaults, repository persistence + discriminators + rider link + tracking
 uniqueness (`ParcelRepositoryTest`, `DispatchRiderRepositoryTest`),
-Spring context (`CampusCourierApplicationTests`).
+service logic with Mockito (`ParcelServiceTest`), HTTP layer with
+MockMvc (`ParcelControllerTest`), Spring context
+(`CampusCourierApplicationTests`).
 
 ## React integration
 
 All endpoints return JSON. CORS already allows
 `http://localhost:3000` (CRA) and `http://localhost:5173` (Vite).
-Errors always look like `{"status":404,"message":"...","timestamp":"..."}`.
+Errors always look like
+`{"timestamp":"...","status":404,"error":"Not Found","message":"...","path":"/api/..."}`.

@@ -32,4 +32,9 @@ public class DocumentParcel extends Parcel {
     public BigDecimal calculateHandlingFee() {
         return HANDLING_FEE;
     }
+
+    @Override
+    public ParcelType getParcelType() {
+        return ParcelType.DOCUMENT;
+    }
 }
